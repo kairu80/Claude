@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "export": "tsc --noEmit && vite build --config vite.config.export.ts && node scripts/finalize-export.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.263.1",
@@ -21,6 +22,7 @@
     "postcss": "^8.4.27",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.0.2",
-    "vite": "^4.4.5"
+    "vite": "^4.4.5",
+    "vite-plugin-singlefile": "^2.3.2"
   }
 }
