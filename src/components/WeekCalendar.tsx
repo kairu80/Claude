@@ -39,7 +39,7 @@ export function WeekCalendar({
       if (!choreIsForKid(c, kidId)) return false;
       if (c.type === 'daily') return c.daysOfWeek.includes(dow);
       if (c.type === 'weekly') return c.daysOfWeek.includes(dow);
-      // extra chores don't appear on calendar unless completed
+      // kindness chores don't appear on the weekly calendar grid
       return false;
     });
   }
