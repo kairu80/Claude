@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYBER SENIOR DETAILER // NEON GRID</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👾</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+/* ========================================================
+   ROOT VARIABLES & RESET
+   ======================================================== */
+:root {
+  --bg:       #050505;
+  --cyan:     #00f0ff;
+  --green:    #39ff14;
+  --magenta:  #ff00ff;
+  --yellow:   #fdf500;
+  --orange:   #ff6600;
+  --red:      #ff3333;
+  --border:   rgba(0,240,255,0.25);
+  --dim:      rgba(0,240,255,0.06);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--cyan);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+}
+
+/* ========================================================
+   CUSTOM SCROLLBARS
+   ======================================================== */
+::-webkit-scrollbar              { width: 12px; height: 12px; }
+::-webkit-scrollbar-track        { background: #080808; border-left: 1px solid var(--border); }
+::-webkit-scrollbar-thumb        { background: var(--cyan); border-radius: 2px; box-shadow: 0 0 6px var(--cyan); }
+::-webkit-scrollbar-thumb:hover  { background: var(--magenta); box-shadow: 0 0 8px var(--magenta); }
+::-webkit-scrollbar-corner       { background: #080808; }
+* { scrollbar-color: var(--cyan) #080808; scrollbar-width: thick; }
+
+/* ========================================================
+   MATRIX RAIN CANVAS
+   ======================================================== */
+#matrix-canvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0; opacity: 0.06;
+  pointer-events: none;
+}
+
+/* Scanline overlay */
+#scanlines {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(0deg,
+    rgba(0,0,0,0.04) 0px, rgba(0,0,0,0.04) 1px,
+    transparent 1px, transparent 2px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ========================================================
+   APP LAYOUT
+   ======================================================== */
+#app {
+  position: relative; z-index: 3;
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ========================================================
+   LEFT PANEL
+   ======================================================== */
+#left-panel {
+  display: flex; flex-direction: column;
+  height: 100vh;
+  border-right: 2px solid var(--cyan);
+  background: rgba(0,8,12,0.96);
+  overflow: hidden;
+}
+
+.lp-title {
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--green);
+  background: rgba(57,255,20,0.04);
+  flex-shrink: 0;
+}
+.lp-title h2 {
+  font-size: 12px; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--green);
+  text-shadow: 0 0 10px var(--green);
+}
+.lp-title .sub { font-size: 9px; color: #2a4a2a; letter-spacing: 2px; margin-top: 2px; }
+
+/* Upload zones */
+.upload-section {
+  padding: 10px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.section-label {
+  font-size: 9px; letter-spacing: 2px;
+  text-transform: uppercase; color: #2a4a5a;
+  margin-bottom: 7px;
+}
+
+.drop-zone {
+  border: 2px dashed rgba(0,240,255,0.25);
+  border-radius: 3px; padding: 10px 12px;
+  text-align: center; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  position: relative; overflow: hidden;
+  margin-bottom: 7px;
+  background: rgba(0,0,0,0.3);
+}
+.drop-zone:last-child { margin-bottom: 0; }
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--cyan); border-style: solid;
+  background: rgba(0,240,255,0.04);
+  box-shadow: 0 0 12px rgba(0,240,255,0.2), inset 0 0 12px rgba(0,240,255,0.04);
+}
+.drop-zone.loaded { border-color: var(--green); border-style: solid; }
+.drop-zone.loaded:hover { border-color: var(--green); box-shadow: 0 0 12px rgba(57,255,20,0.2); }
+
+.dz-label {
+  font-size: 11px; letter-spacing: 2px;
+  text-transform: uppercase;
+  pointer-events: none; font-weight: bold;
+}
+.dz-sub {
+  font-size: 9px; color: #333; margin-top: 3px;
+  pointer-events: none; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.drop-zone.loaded .dz-sub { color: var(--green); }
+
+/* Priority panel */
+#priority-header {
+  flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 13px 7px;
+  border-bottom: 1px solid rgba(57,255,20,0.2);
+  background: rgba(57,255,20,0.03);
+}
+#priority-header .ph-title {
+  font-size: 9px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--green);
+}
+#priority-count {
+  font-size: 11px; font-weight: bold; color: var(--red);
+  text-shadow: 0 0 6px var(--red);
+}
+
+#priority-panel {
+  flex: 1; overflow-y: auto;
+  padding: 8px;
+}
+
+/* Priority cards */
+.p-card {
+  border: 1px solid; border-radius: 3px;
+  padding: 9px 11px; margin-bottom: 7px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  background: rgba(0,0,0,0.55);
+  position: relative; overflow: hidden;
+}
+.p-card::before {
+  content: ''; position: absolute;
+  left: 0; top: 0; bottom: 0; width: 3px;
+  background: currentColor; opacity: 0.6;
+}
+.p-card:hover { transform: translateX(4px); box-shadow: 0 0 14px rgba(0,0,0,0.5); }
+.p-card.crit    { color: var(--magenta); border-color: rgba(255,0,255,0.45); }
+.p-card.urgent  { color: var(--red);     border-color: rgba(255,51,51,0.45); }
+.p-card.warning { color: var(--orange);  border-color: rgba(255,102,0,0.45); }
+.p-card.caution { color: var(--yellow);  border-color: rgba(253,245,0,0.45); }
+
+.p-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.p-card-name { font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+.p-card-meta { font-size: 9px; color: #555; margin-top: 2px; letter-spacing: 1px; }
+.p-card-days { font-size: 18px; font-weight: bold; letter-spacing: -1px; text-align: right; flex-shrink: 0; margin-left: 6px; }
+
+/* Stats bar */
+#left-stats {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: #333; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.lstat-val { font-weight: bold; }
+
+/* ========================================================
+   RIGHT PANEL
+   ======================================================== */
+#right-panel {
+  display: flex; flex-direction: column;
+  height: 100vh; overflow: hidden;
+  background: rgba(0,3,8,0.97);
+}
+
+.rp-title {
+  flex-shrink: 0;
+  padding: 8px 15px;
+  border-bottom: 2px solid var(--cyan);
+  background: rgba(0,240,255,0.03);
+  display: flex; align-items: center; gap: 15px;
+}
+.rp-title h1 {
+  font-size: 13px; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--cyan);
+  text-shadow: 0 0 10px var(--cyan);
+  animation: flicker 6s infinite;
+}
+.rp-title .rp-sub { font-size: 9px; color: #1a2a3a; letter-spacing: 2px; }
+
+@keyframes flicker {
+  0%,100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.7; }
+  94% { opacity: 1; }
+  96% { opacity: 0.85; }
+  97% { opacity: 1; }
+}
+
+/* Toolbar */
+#toolbar {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.7);
+}
+
+/* Buttons */
+.btn {
+  padding: 4px 11px;
+  border: 1px solid; border-radius: 2px;
+  cursor: pointer; background: transparent;
+  font-family: 'Courier New', monospace;
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  transition: all 0.15s; white-space: nowrap;
+}
+.btn:hover { box-shadow: 0 0 10px currentColor; }
+.btn.active { box-shadow: 0 0 12px currentColor; }
+
+.btn-c  { color: var(--cyan);    border-color: var(--cyan); }
+.btn-c:hover,  .btn-c.active  { background: rgba(0,240,255,0.12); }
+.btn-g  { color: var(--green);   border-color: var(--green); }
+.btn-g:hover,  .btn-g.active  { background: rgba(57,255,20,0.12); }
+.btn-m  { color: var(--magenta); border-color: var(--magenta); }
+.btn-m:hover,  .btn-m.active  { background: rgba(255,0,255,0.12); }
+.btn-y  { color: var(--yellow);  border-color: var(--yellow); }
+.btn-y:hover,  .btn-y.active  { background: rgba(253,245,0,0.12); }
+.btn-o  { color: var(--orange);  border-color: var(--orange); }
+.btn-o:hover,  .btn-o.active  { background: rgba(255,102,0,0.12); }
+.btn-r  { color: var(--red);     border-color: var(--red); }
+.btn-r:hover,  .btn-r.active  { background: rgba(255,51,51,0.12); }
+
+#search-bar {
+  flex: 1; min-width: 180px;
+  padding: 4px 10px;
+  background: rgba(0,240,255,0.04);
+  border: 1px solid rgba(0,240,255,0.2);
+  border-radius: 2px; color: var(--cyan);
+  font-family: 'Courier New', monospace;
+  font-size: 11px; outline: none;
+}
+#search-bar:focus { border-color: var(--cyan); box-shadow: 0 0 8px rgba(0,240,255,0.2); }
+#search-bar::placeholder { color: #1a2a3a; }
+
+/* Header filters */
+#header-filters {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  display: flex; flex-wrap: wrap; gap: 5px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.55);
+}
+
+.fsel {
+  padding: 3px 7px;
+  background: rgba(0,240,255,0.03);
+  border: 1px solid rgba(0,240,255,0.18);
+  border-radius: 2px; color: var(--cyan);
+  font-family: 'Courier New', monospace;
+  font-size: 10px; outline: none; cursor: pointer;
+  max-width: 140px;
+}
+.fsel:focus { border-color: var(--cyan); }
+.fsel option { background: #050a10; }
+
+/* Table stats bar */
+#table-stats {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  display: flex; gap: 18px; align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.45);
+  font-size: 9px; color: #2a3a4a; text-transform: uppercase; letter-spacing: 1px;
+}
+.ts-val { font-weight: bold; }
+
+/* Table container */
+#table-container {
+  flex: 1; overflow: auto;
+}
+
+/* No data message */
+#no-data-msg {
+  text-align: center; padding: 80px 20px;
+  color: #1a2a3a; font-size: 12px;
+  letter-spacing: 3px; text-transform: uppercase;
+}
+#no-data-msg .nd-icon { font-size: 40px; margin-bottom: 15px; }
+
+/* ========================================================
+   TABLE
+   ======================================================== */
+#slate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+#slate-table thead { position: sticky; top: 0; z-index: 10; }
+
+#slate-table th {
+  padding: 7px 10px; text-align: left;
+  border-bottom: 2px solid var(--cyan);
+  border-right: 1px solid rgba(0,240,255,0.12);
+  color: var(--cyan);
+  text-transform: uppercase; letter-spacing: 1px;
+  font-size: 9px; white-space: nowrap;
+  background: rgba(0,8,15,0.99);
+  text-shadow: 0 0 4px var(--cyan);
+}
+#slate-table th:first-child { background: rgba(0,5,10,0.99); }
+
+#slate-table td {
+  padding: 5px 9px;
+  border-bottom: 1px solid rgba(0,240,255,0.07);
+  border-right: 1px solid rgba(0,240,255,0.04);
+  vertical-align: top;
+  min-width: 70px; max-width: 180px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+#slate-table td[contenteditable="true"]:focus {
+  outline: 1px solid rgba(0,240,255,0.6);
+  background: rgba(0,240,255,0.06) !important;
+  white-space: normal; overflow: visible;
+  max-width: none;
+}
+
+#slate-table tr:hover td { background: rgba(0,240,255,0.03); }
+#slate-table tr:nth-child(even) td { background: rgba(0,0,0,0.25); }
+#slate-table tr:nth-child(even):hover td { background: rgba(0,240,255,0.03); }
+
+/* ========================================================
+   BADGES
+   ======================================================== */
+.badge {
+  display: inline-block; padding: 2px 7px;
+  border-radius: 2px; font-size: 9px; font-weight: bold;
+  letter-spacing: 1px; text-transform: uppercase; white-space: nowrap;
+}
+.b-overlap { background: rgba(57,255,20,0.12);  color: var(--green);   border: 1px solid rgba(57,255,20,0.5); }
+.b-gap     { background: rgba(255,51,51,0.12);  color: var(--red);     border: 1px solid rgba(255,51,51,0.5); }
+.b-vacant  { background: rgba(253,245,0,0.12);  color: var(--yellow);  border: 1px solid rgba(253,245,0,0.5); }
+.b-student { background: rgba(80,80,80,0.15);   color: #666;           border: 1px solid #333; }
+.b-loss    { background: rgba(255,0,255,0.12);  color: var(--magenta); border: 1px solid rgba(255,0,255,0.5); }
+
+/* Future orders banner */
+.fo-banner {
+  display: inline-block; margin-top: 4px;
+  padding: 2px 6px;
+  background: rgba(0,240,255,0.08);
+  border: 1px solid rgba(0,240,255,0.4);
+  border-radius: 2px; font-size: 9px;
+  color: var(--cyan); cursor: pointer;
+  white-space: nowrap;
+  text-shadow: 0 0 4px var(--cyan);
+  transition: background 0.15s, box-shadow 0.15s;
+  max-width: 300px; overflow: hidden; text-overflow: ellipsis;
+}
+.fo-banner:hover { background: rgba(0,240,255,0.16); box-shadow: 0 0 8px rgba(0,240,255,0.3); }
+
+/* Clickable cells */
+.clk-name {
+  cursor: pointer; color: var(--magenta);
+  transition: text-shadow 0.15s;
+}
+.clk-name:hover { text-shadow: 0 0 8px var(--magenta); }
+
+.clk-billet {
+  cursor: pointer; color: var(--cyan);
+  transition: text-shadow 0.15s;
+}
+.clk-billet:hover { text-shadow: 0 0 8px var(--cyan); }
+
+.student-track { color: #444; font-style: italic; font-size: 10px; }
+
+/* ========================================================
+   MODAL
+   ======================================================== */
+.modal-overlay {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.88);
+  z-index: 1000; display: flex;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+}
+
+.modal-box {
+  background: #080c10;
+  border: 2px solid var(--cyan);
+  border-radius: 4px;
+  min-width: 480px; max-width: 680px;
+  max-height: 82vh; overflow-y: auto;
+  box-shadow: 0 0 40px rgba(0,240,255,0.3), 0 0 80px rgba(0,0,0,0.8);
+  position: relative;
+}
+.modal-box.modal-pers {
+  border-color: var(--magenta);
+  box-shadow: 0 0 40px rgba(255,0,255,0.3), 0 0 80px rgba(0,0,0,0.8);
+}
+.modal-box.modal-hud {
+  min-width: 560px; max-width: 700px;
+  border-color: var(--magenta);
+  box-shadow: 0 0 40px rgba(255,0,255,0.3), 0 0 80px rgba(0,0,0,0.8);
+}
+
+.modal-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; background: #080c10; z-index: 1;
+}
+.modal-title-text {
+  font-size: 11px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--cyan);
+}
+.modal-box.modal-pers .modal-title-text { color: var(--magenta); }
+.modal-box.modal-hud .modal-title-text  { color: var(--magenta); }
+.modal-close {
+  cursor: pointer; color: var(--red);
+  font-size: 16px; line-height: 1; padding: 2px 5px;
+  transition: text-shadow 0.15s;
+}
+.modal-close:hover { text-shadow: 0 0 10px var(--red); }
+
+.modal-body { padding: 18px; }
+
+.mf-row {
+  display: grid; grid-template-columns: 130px 1fr;
+  gap: 8px; padding: 7px 0;
+  border-bottom: 1px solid rgba(0,240,255,0.07);
+}
+.mf-key {
+  font-size: 9px; color: #2a3a4a;
+  text-transform: uppercase; letter-spacing: 1px;
+  padding-top: 2px;
+}
+.mf-val { font-size: 11px; color: #ccc; word-break: break-word; }
+.modal-box.modal-pers .mf-val { color: var(--magenta); }
+
+.modal-section-head {
+  font-size: 9px; color: #1a2a3a;
+  text-transform: uppercase; letter-spacing: 2px;
+  margin: 14px 0 6px;
+  border-top: 1px solid rgba(0,240,255,0.1); padding-top: 10px;
+}
+.modal-box.modal-pers .modal-section-head { border-color: rgba(255,0,255,0.1); }
+
+.future-orders-block {
+  margin-top: 14px; padding: 12px 14px;
+  border: 1px solid rgba(0,240,255,0.3);
+  background: rgba(0,240,255,0.04); border-radius: 3px;
+}
+.fo-block-title {
+  font-size: 9px; color: var(--cyan);
+  text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+}
+.fo-block-cmd { font-size: 13px; color: #ddd; font-weight: bold; }
+.fo-block-dates { font-size: 10px; color: #444; margin-top: 5px; }
+
+/* ========================================================
+   HUD MODAL
+   ======================================================== */
+.hud-controls {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin-bottom: 18px;
+}
+.hud-ctrl-label {
+  font-size: 9px; color: #2a3a4a;
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;
+}
+.hud-fsel {
+  width: 100%; padding: 7px 10px;
+  background: rgba(255,0,255,0.04);
+  border: 1px solid rgba(255,0,255,0.25);
+  border-radius: 2px; color: var(--magenta);
+  font-family: 'Courier New', monospace;
+  font-size: 11px; outline: none; cursor: pointer;
+}
+.hud-fsel:focus { border-color: var(--magenta); }
+.hud-fsel option { background: #080c10; }
+
+#hud-result { text-align: center; }
+
+.hud-pct {
+  font-size: 90px; font-weight: bold;
+  letter-spacing: -4px; line-height: 1;
+  margin: 10px 0 5px;
+  text-shadow: 0 0 30px currentColor;
+}
+.hud-pct.pct-g { color: var(--green); }
+.hud-pct.pct-y { color: var(--yellow); }
+.hud-pct.pct-r { color: var(--red); }
+
+.hud-sub {
+  font-size: 10px; color: #2a3a4a;
+  letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px;
+}
+
+.hud-stat-grid {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 8px; margin-top: 12px;
+}
+.hud-stat {
+  text-align: center; padding: 10px 8px;
+  border: 1px solid rgba(0,240,255,0.15);
+  border-radius: 3px; background: rgba(0,0,0,0.4);
+}
+.hud-stat-n { font-size: 22px; font-weight: bold; }
+.hud-stat-l { font-size: 8px; color: #2a3a4a; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+
+.hud-empty-msg { color: #1a2a3a; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; padding: 30px 0; }
+</style>
+</head>
+<body>
+
+<!-- Matrix rain background -->
+<canvas id="matrix-canvas"></canvas>
+<div id="scanlines"></div>
+
+<div id="app">
+
+  <!-- ===================================================
+       LEFT PANEL
+       =================================================== -->
+  <div id="left-panel">
+    <div class="lp-title">
+      <h2>👾 NEON GRID</h2>
+      <div class="sub">CYBER SENIOR DETAILER v2.0</div>
+    </div>
+
+    <div class="upload-section">
+      <div class="section-label">// DATA INGESTION //</div>
+
+      <div class="drop-zone" id="dz-slate">
+        <div class="dz-label" style="color:var(--cyan);">[1] DROP SLATE</div>
+        <div class="dz-sub" id="slate-status">DRAG &amp; DROP OR CLICK TO UPLOAD</div>
+      </div>
+      <input type="file" id="fi-slate" accept=".xlsx,.xls,.csv" style="display:none">
+
+      <div class="drop-zone" id="dz-inv">
+        <div class="dz-label" style="color:var(--green);">[2] DROP INVENTORY</div>
+        <div class="dz-sub" id="inv-status">DRAG &amp; DROP OR CLICK TO UPLOAD</div>
+      </div>
+      <input type="file" id="fi-inv" accept=".xlsx,.xls,.csv" style="display:none">
+    </div>
+
+    <div id="priority-header">
+      <span class="ph-title">⚡ PRIORITY ACTIONS (&lt;120 DAYS)</span>
+      <span id="priority-count">--</span>
+    </div>
+
+    <div id="priority-panel">
+      <div id="p-empty" style="text-align:center;padding:30px 10px;color:#1a2a3a;font-size:10px;letter-spacing:2px;text-transform:uppercase;">
+        AWAITING DATA UPLOAD
+      </div>
+    </div>
+
+    <div id="left-stats">
+      <span>SLATE: <span class="lstat-val" id="ls-slate" style="color:var(--cyan);">--</span></span>
+      <span>INV: <span class="lstat-val" id="ls-inv" style="color:var(--green);">--</span></span>
+      <span>VACANT: <span class="lstat-val" id="ls-vacant" style="color:var(--yellow);">--</span></span>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       RIGHT PANEL
+       =================================================== -->
+  <div id="right-panel">
+    <div class="rp-title">
+      <h1>CYBER SENIOR DETAILER // NEON GRID</h1>
+      <span class="rp-sub">PERSONNEL MANAGEMENT SYSTEM // CLASSIFICATION: UNCLASSIFIED</span>
+    </div>
+
+    <div id="toolbar">
+      <button class="btn btn-c active" id="btn-all"       onclick="setFilter('all')">ALL BILLETS</button>
+      <button class="btn btn-c"        id="btn-1880"      onclick="setFilter('1880')">1880</button>
+      <button class="btn btn-c"        id="btn-1840"      onclick="setFilter('1840')">1840</button>
+      <button class="btn btn-c"        id="btn-7840"      onclick="setFilter('7840')">7840</button>
+      <button class="btn btn-y"        id="btn-students"  onclick="setFilter('students')">STUDENTS</button>
+      <button class="btn btn-y"        id="btn-vacancies" onclick="setFilter('vacancies')">VACANCIES</button>
+      <button class="btn btn-g"                           onclick="exportXLSX()">EXPORT .XLSX</button>
+      <button class="btn btn-m"                           onclick="openHUD()">[ CMD HUD ]</button>
+      <button class="btn btn-o"                           onclick="clearAllFilters()" title="Remove all filters and show full slate">CLEAR FILTERS</button>
+      <button class="btn btn-r"                           onclick="sysReset()">[ SYS RESET ]</button>
+      <input id="search-bar" type="text" placeholder="&gt;&gt; SEARCH MATRIX..." oninput="onSearch(this.value)">
+    </div>
+
+    <div id="header-filters">
+      <select class="fsel" id="f-cmd"   onchange="applyHF()"><option value="">[ COMMAND ]</option></select>
+      <select class="fsel" id="f-loc"   onchange="applyHF()"><option value="">[ LOCATION ]</option></select>
+      <select class="fsel" id="f-bttl"  onchange="applyHF()"><option value="">[ BILLET TITLE ]</option></select>
+      <select class="fsel" id="f-bdes"  onchange="applyHF()"><option value="">[ B-DESIG ]</option></select>
+      <select class="fsel" id="f-ides"  onchange="applyHF()"><option value="">[ I-DESIG ]</option></select>
+      <select class="fsel" id="f-brk"   onchange="applyHF()"><option value="">[ B-RANK ]</option></select>
+      <select class="fsel" id="f-irk"   onchange="applyHF()"><option value="">[ I-RANK ]</option></select>
+    </div>
+
+    <div id="table-stats">
+      <span>DISPLAYING: <span class="ts-val" id="ts-show" style="color:var(--cyan);">0</span></span>
+      <span>GAPS: <span class="ts-val" id="ts-gaps" style="color:var(--red);">0</span></span>
+      <span>VACANT: <span class="ts-val" id="ts-vac" style="color:var(--yellow);">0</span></span>
+      <span>OVERLAP: <span class="ts-val" id="ts-olap" style="color:var(--green);">0</span></span>
+      <span>STUDENTS: <span class="ts-val" id="ts-stu" style="color:#666;">0</span></span>
+    </div>
+
+    <div id="table-container">
+      <div id="no-data-msg">
+        <div class="nd-icon">👾</div>
+        <div>AWAITING DATA UPLOAD</div>
+        <div style="font-size:9px;margin-top:8px;color:#111;">DROP SLATE FILE TO INITIALIZE MATRIX</div>
+      </div>
+      <table id="slate-table" style="display:none">
+        <thead id="t-head"></thead>
+        <tbody id="t-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     RECORD MODAL
+     ===================================================== -->
+<div id="rec-overlay" class="modal-overlay" style="display:none" onclick="closeRecModal(event)">
+  <div class="modal-box" id="rec-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span class="modal-title-text" id="rec-title">RECORD</span>
+      <span class="modal-close" onclick="closeRecDirect()">✕</span>
+    </div>
+    <div class="modal-body" id="rec-body"></div>
+  </div>
+</div>
+
+<!-- =====================================================
+     HUD MODAL
+     ===================================================== -->
+<div id="hud-overlay" class="modal-overlay" style="display:none" onclick="closeHudModal(event)">
+  <div class="modal-box modal-hud" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span class="modal-title-text">⚡ COMMAND HUD // FILL RATE CALCULATOR</span>
+      <span class="modal-close" onclick="document.getElementById('hud-overlay').style.display='none'">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="hud-controls">
+        <div>
+          <div class="hud-ctrl-label">COMMAND</div>
+          <select class="hud-fsel" id="hud-cmd" onchange="calcHUD()">
+            <option value="">-- SELECT COMMAND --</option>
+          </select>
+        </div>
+        <div>
+          <div class="hud-ctrl-label">RANK BRACKET</div>
+          <select class="hud-fsel" id="hud-rank" onchange="calcHUD()">
+            <option value="">ALL RANKS</option>
+            <option value="CONTROL">CONTROL GRADE (O4–O6)</option>
+            <option value="O6">O6</option>
+            <option value="O5">O5</option>
+            <option value="O4">O4</option>
+            <option value="O3">O3</option>
+            <option value="O2">O2</option>
+            <option value="O1">O1</option>
+          </select>
+        </div>
+      </div>
+      <div id="hud-result">
+        <div class="hud-empty-msg">SELECT COMMAND TO CALCULATE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     JAVASCRIPT
+     ===================================================== -->
+<script>
+/* ============================================================
+   MATRIX RAIN
+   ============================================================ */
+(function initRain() {
+  const cvs = document.getElementById('matrix-canvas');
+  const ctx = cvs.getContext('2d');
+  const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF<>[]{}/|?!@#$%';
+  const FS = 14;
+  let drops = [];
+
+  function resize() {
+    cvs.width  = window.innerWidth;
+    cvs.height = window.innerHeight;
+    const cols = Math.floor(cvs.width / FS);
+    if (drops.length !== cols) {
+      drops = Array.from({ length: cols }, () => Math.floor(Math.random() * -cvs.height / FS));
+    }
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  setInterval(() => {
+    ctx.fillStyle = 'rgba(5,5,5,0.055)';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.font = FS + 'px Courier New';
+    for (let i = 0; i < drops.length; i++) {
+      const ch = CHARS[Math.floor(Math.random() * CHARS.length)];
+      const bright = Math.random();
+      ctx.fillStyle = bright > 0.96 ? '#ffffff' : bright > 0.7 ? '#00f0ff' : '#0066aa';
+      ctx.fillText(ch, i * FS, drops[i] * FS);
+      if (drops[i] * FS > cvs.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }, 45);
+})();
+
+/* ============================================================
+   GLOBAL STATE
+   ============================================================ */
+let slateData    = [];
+let inventoryData = [];
+let activeFilter = 'all';
+let searchTerm   = '';
+let hf = { cmd:'', loc:'', bttl:'', bdes:'', ides:'', brk:'', irk:'' };
+let allColumns   = [];
+
+const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+const PII   = ['ISSN','PSSN','SSN','DODID'];
+const PREFERRED_COLS = ['ASNAME','UIC','ALOC_TITL','BBTITLE','BDESIG','BRANK','INAME','IDESIG','IRANK','IPRD','PNAME','PEDA','PEDD'];
+const TARGET_DESIG   = ['1880','1840','7840'];
+
+/* ============================================================
+   DRAG/DROP GLOBAL PREVENTION
+   ============================================================ */
+['dragover','drop'].forEach(evt => {
+  window.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+  document.body.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+});
+
+/* ============================================================
+   DROP ZONE SETUP
+   ============================================================ */
+function setupDZ(zoneId, inputId, type) {
+  const zone  = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragenter', e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0], type);
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files.length) { processFile(e.target.files[0], type); e.target.value = ''; }
+  });
+}
+
+setupDZ('dz-slate', 'fi-slate', 'slate');
+setupDZ('dz-inv',   'fi-inv',   'inv');
+
+/* ============================================================
+   FILE PROCESSING
+   ============================================================ */
+function processFile(file, type) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      let data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      // PII scrub
+      if (data.length > 0) {
+        const safe = Object.keys(data[0]).filter(k => !PII.some(p => k.toUpperCase().includes(p)));
+        data = data.map(row => { const o = {}; safe.forEach(k => o[k] = row[k]); return o; });
+      }
+
+      if (type === 'slate') {
+        slateData  = data;
+        allColumns = data.length ? Object.keys(data[0]) : [];
+        document.getElementById('slate-status').textContent = `✓ ${file.name}  //  ${data.length} RECORDS`;
+        document.getElementById('dz-slate').classList.add('loaded');
+        document.getElementById('ls-slate').textContent = data.length;
+        buildDropdowns();
+        renderTable();
+        renderPriorityPanel();
+      } else {
+        inventoryData = data;
+        document.getElementById('inv-status').textContent = `✓ ${file.name}  //  ${data.length} RECORDS`;
+        document.getElementById('dz-inv').classList.add('loaded');
+        document.getElementById('ls-inv').textContent = data.length;
+        renderPriorityPanel();
+      }
+    } catch(err) {
+      alert('FILE PARSE ERROR: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ============================================================
+   DATE UTILITIES
+   ============================================================ */
+function parseYYYYMM(val) {
+  if (!val) return null;
+  const s = String(val).trim().replace(/[^0-9]/g,'');
+  if (s.length >= 6) {
+    const yr = parseInt(s.substring(0,4));
+    const mo = parseInt(s.substring(4,6)) - 1;
+    if (yr > 1900 && mo >= 0 && mo <= 11) return new Date(yr, mo, 1);
+  }
+  const d = new Date(val);
+  return isNaN(d) ? null : d;
+}
+
+function daysUntil(date) {
+  if (!date) return null;
+  return Math.floor((date - TODAY) / 86400000);
+}
+
+function cmpYYYYMM(a, b) {
+  const n = s => { const c = String(s).trim().replace(/[^0-9]/g,'').substring(0,6); return isNaN(c) || !c ? 0 : parseInt(c); };
+  return n(a) - n(b);
+}
+
+/* ============================================================
+   RANK → PAY GRADE MAP
+   ============================================================ */
+const RANK_PG = {
+  ENS:'O1', ENSIGN:'O1',
+  LTJG:'O2', 'LT JG':'O2', 'LTJG.':'O2',
+  LT:'O3', LIEUTENANT:'O3',
+  LCDR:'O4', 'LT CDR':'O4', 'LIEUTENANT COMMANDER':'O4',
+  CDR:'O5', COMMANDER:'O5',
+  CAPT:'O6', CAPTAIN:'O6',
+  O1:'O1', O2:'O2', O3:'O3', O4:'O4', O5:'O5', O6:'O6'
+};
+
+function toPayGrade(rank) {
+  return RANK_PG[String(rank).toUpperCase().trim()] || null;
+}
+
+/* ============================================================
+   BUSINESS LOGIC HELPERS
+   ============================================================ */
+function isStudent(row) { return String(row.ASNAME||'').trim().startsWith('S '); }
+
+function isLoss(row) {
+  const a = String(row.ASNAME||'').toUpperCase();
+  const u = String(row.UIC||'').toUpperCase();
+  return a.includes('4392A') || a.includes('SEPARATION') || u.includes('4392A') || u.includes('SEPARATION');
+}
+
+function buildFutureMap() {
+  const map = {};
+  slateData.forEach(row => {
+    const pn = String(row.PNAME||'').trim();
+    if (pn && !map[pn]) {
+      map[pn] = {
+        toCmd: String(row.ASNAME   ||'').trim(),
+        toLoc: String(row.ALOC_TITL||'').trim(),
+        edd:   String(row.PEDD     ||'').trim(),
+        eda:   String(row.PEDA     ||'').trim(),
+      };
+    }
+  });
+  return map;
+}
+
+function getStatusHTML(row) {
+  if (isStudent(row))                                      return '<span class="badge b-student">STUDENT</span>';
+  const pn   = String(row.PNAME||'').trim();
+  if (!pn)                                                 return '<span class="badge b-vacant">VACANT</span>';
+  const peda = String(row.PEDA ||'').trim();
+  const iprd = String(row.IPRD ||'').trim();
+  if (peda && iprd) {
+    return cmpYYYYMM(peda,iprd) <= 0
+      ? '<span class="badge b-overlap">OVERLAP ✓</span>'
+      : '<span class="badge b-gap">GAP ⚠</span>';
+  }
+  return '<span class="badge b-overlap">OVERLAP ✓</span>';
+}
+
+/* ============================================================
+   FILTER DROPDOWNS
+   ============================================================ */
+function buildDropdowns() {
+  const uq = col => [...new Set(slateData.map(r => String(r[col]||'').trim()).filter(Boolean))].sort();
+
+  function populate(selId, vals, emptyLabel) {
+    const el = document.getElementById(selId);
+    const cur = el.value;
+    el.innerHTML = `<option value="">${emptyLabel}</option>`;
+    vals.forEach(v => { const o = document.createElement('option'); o.value = o.textContent = v; el.appendChild(o); });
+    if (vals.includes(cur)) el.value = cur;
+  }
+
+  populate('f-cmd',  uq('ASNAME'),   '[ COMMAND ]');
+  populate('f-loc',  uq('ALOC_TITL'),'[ LOCATION ]');
+  populate('f-bttl', uq('BBTITLE'),  '[ BILLET TITLE ]');
+  populate('f-bdes', uq('BDESIG'),   '[ B-DESIG ]');
+  populate('f-ides', uq('IDESIG'),   '[ I-DESIG ]');
+  populate('f-brk',  uq('BRANK'),    '[ B-RANK ]');
+  populate('f-irk',  uq('IRANK'),    '[ I-RANK ]');
+
+  // HUD command dropdown (exclude students)
+  const cmds = uq('ASNAME').filter(c => !c.startsWith('S '));
+  const hc = document.getElementById('hud-cmd');
+  const hcCur = hc.value;
+  hc.innerHTML = '<option value="">-- SELECT COMMAND --</option>';
+  cmds.forEach(c => { const o = document.createElement('option'); o.value = o.textContent = c; hc.appendChild(o); });
+  if (cmds.includes(hcCur)) hc.value = hcCur;
+}
+
+/* ============================================================
+   FILTERING
+   ============================================================ */
+function getFiltered() {
+  if (!slateData.length) return [];
+  return slateData.filter(row => {
+    // Quick filter
+    if (activeFilter === '1880' || activeFilter === '1840' || activeFilter === '7840') {
+      const bd = String(row.BDESIG||'').trim(), id = String(row.IDESIG||'').trim();
+      if (bd !== activeFilter && id !== activeFilter) return false;
+    } else if (activeFilter === 'students') {
+      if (!isStudent(row)) return false;
+    } else if (activeFilter === 'vacancies') {
+      if (String(row.PNAME||'').trim() || isStudent(row)) return false;
+    }
+    // Header filters
+    if (hf.cmd  && String(row.ASNAME   ||'').trim() !== hf.cmd)  return false;
+    if (hf.loc  && String(row.ALOC_TITL||'').trim() !== hf.loc)  return false;
+    if (hf.bttl && String(row.BBTITLE  ||'').trim() !== hf.bttl) return false;
+    if (hf.bdes && String(row.BDESIG   ||'').trim() !== hf.bdes) return false;
+    if (hf.ides && String(row.IDESIG   ||'').trim() !== hf.ides) return false;
+    if (hf.brk  && String(row.BRANK    ||'').trim() !== hf.brk)  return false;
+    if (hf.irk  && String(row.IRANK    ||'').trim() !== hf.irk)  return false;
+    // Search
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      if (!Object.values(row).join(' ').toLowerCase().includes(t)) return false;
+    }
+    return true;
+  });
+}
+
+/* ============================================================
+   RENDER TABLE
+   ============================================================ */
+function getDisplayCols() {
+  const pref  = PREFERRED_COLS.filter(c => allColumns.includes(c));
+  const extra = allColumns.filter(c => !PREFERRED_COLS.includes(c));
+  return [...pref, ...extra];
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+  const noData  = document.getElementById('no-data-msg');
+  const tbl     = document.getElementById('slate-table');
+  const thead   = document.getElementById('t-head');
+  const tbody   = document.getElementById('t-body');
+
+  if (!slateData.length) {
+    noData.style.display = 'block'; tbl.style.display = 'none'; return;
+  }
+  noData.style.display = 'none'; tbl.style.display = 'table';
+
+  const cols    = getDisplayCols();
+  const filtered = getFiltered();
+  const fmap    = buildFutureMap();
+
+  // Stats
+  let gaps=0, vacs=0, olaps=0, stus=0;
+  filtered.forEach(r => {
+    if (isStudent(r)) { stus++; return; }
+    const pn = String(r.PNAME||'').trim();
+    if (!pn) { vacs++; return; }
+    const peda = String(r.PEDA||'').trim(), iprd = String(r.IPRD||'').trim();
+    if (peda && iprd && cmpYYYYMM(peda,iprd) > 0) gaps++; else olaps++;
+  });
+  document.getElementById('ts-show').textContent = filtered.length;
+  document.getElementById('ts-gaps').textContent = gaps;
+  document.getElementById('ts-vac' ).textContent = vacs;
+  document.getElementById('ts-olap').textContent = olaps;
+  document.getElementById('ts-stu' ).textContent = stus;
+  document.getElementById('ls-vacant').textContent = vacs;
+
+  // Header row
+  thead.innerHTML = '';
+  const hr = document.createElement('tr');
+  const thS = document.createElement('th');
+  thS.textContent = 'STATUS'; thS.style.minWidth = '110px';
+  hr.appendChild(thS);
+  cols.forEach(col => {
+    const th = document.createElement('th'); th.textContent = col; hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+
+  // Body
+  tbody.innerHTML = '';
+  filtered.forEach(row => {
+    const origIdx = slateData.indexOf(row);
+    const tr = document.createElement('tr');
+
+    // Status cell
+    const tdS = document.createElement('td');
+    let sHTML = getStatusHTML(row);
+    if (isLoss(row)) sHTML += '<br><span class="badge b-loss" style="margin-top:3px;">LOSS</span>';
+    tdS.innerHTML = sHTML;
+    tr.appendChild(tdS);
+
+    const isStu = isStudent(row);
+
+    cols.forEach(col => {
+      const td  = document.createElement('td');
+      const val = String(row[col]||'');
+
+      if (col === 'INAME') {
+        // Clickable name + future orders banner (non-contenteditable, modal-only)
+        const iname = val.trim();
+        let html = iname
+          ? `<span class="clk-name" data-idx="${origIdx}">${esc(iname)}</span>`
+          : `<span style="color:#1a2a3a;">--</span>`;
+        const fo = fmap[iname];
+        if (fo && iname) {
+          html += `<br><span class="fo-banner" data-name="${esc(iname)}">&raquo; ${esc(fo.toCmd)} | EDD: ${esc(fo.edd)} | EDA: ${esc(fo.eda)}</span>`;
+        }
+        td.innerHTML = html;
+
+      } else if (col === 'BBTITLE') {
+        // Clickable billet title (non-contenteditable)
+        td.innerHTML = val
+          ? `<span class="clk-billet" data-idx="${origIdx}">${esc(val)}</span>`
+          : `<span style="color:#1a2a3a;">--</span>`;
+
+      } else if (col === 'PNAME' && isStu) {
+        // Student track – not editable
+        td.innerHTML = '<span class="student-track">[STUDENT TRACK]</span>';
+
+      } else {
+        // Editable cell
+        td.contentEditable = 'true';
+        td.textContent = val;
+        td.addEventListener('blur', () => {
+          slateData[origIdx][col] = td.textContent.trim();
+          buildDropdowns();
+        });
+      }
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  // Delegate click events on body (INAME and BBTITLE)
+  tbody.onclick = function(e) {
+    const cn = e.target.closest('.clk-name');
+    const cb = e.target.closest('.clk-billet');
+    const fo = e.target.closest('.fo-banner');
+    if (cn)  { openPersonnelModal(parseInt(cn.dataset.idx)); return; }
+    if (cb)  { openBilletModal(parseInt(cb.dataset.idx));    return; }
+    if (fo)  { teleport(fo.dataset.name);                    return; }
+  };
+}
+
+/* ============================================================
+   PRIORITY PANEL
+   ============================================================ */
+function renderPriorityPanel() {
+  const panel = document.getElementById('priority-panel');
+
+  if (!slateData.length && !inventoryData.length) {
+    panel.innerHTML = '<div id="p-empty" style="text-align:center;padding:30px 10px;color:#1a2a3a;font-size:10px;letter-spacing:2px;text-transform:uppercase;">AWAITING DATA UPLOAD</div>';
+    document.getElementById('priority-count').textContent = '--';
+    return;
+  }
+
+  // Build set of all PNAMEs (people who already have orders)
+  const pnameSet = new Set(slateData.map(r => String(r.PNAME||'').trim()).filter(Boolean));
+
+  let cards = [];
+
+  // From slate
+  slateData.forEach((row, idx) => {
+    const iname  = String(row.INAME ||'').trim();
+    if (!iname) return;
+    const idesig = String(row.IDESIG||'').trim();
+    if (!TARGET_DESIG.includes(idesig)) return;
+    if (isLoss(row) || isStudent(row))  return;
+    if (pnameSet.has(iname))            return; // has future orders
+
+    const iprdDate = parseYYYYMM(String(row.IPRD||''));
+    if (!iprdDate) return;
+    const days = daysUntil(iprdDate);
+    if (days === null || days > 120) return;
+
+    cards.push({ name: iname, idesig, irank: String(row.IRANK||'').trim(), cmd: String(row.ASNAME||'').trim(), iprd: String(row.IPRD||''), days, origIdx: idx });
+  });
+
+  // Inventory cross-reference
+  if (inventoryData.length) {
+    const invKeys  = Object.keys(inventoryData[0] || {});
+    const nameKey  = invKeys.find(k => k.toUpperCase() === 'INAME') || invKeys.find(k => k.toUpperCase().includes('NAME')) || invKeys[0];
+    const desigKey = invKeys.find(k => k.toUpperCase() === 'IDESIG') || invKeys.find(k => k.toUpperCase().includes('DESIG'));
+    const rankKey  = invKeys.find(k => k.toUpperCase() === 'IRANK')  || invKeys.find(k => k.toUpperCase().includes('RANK'));
+
+    const slateFootprint = new Set([
+      ...slateData.map(r => String(r.INAME ||'').trim()),
+      ...slateData.map(r => String(r.PNAME ||'').trim()),
+    ].filter(Boolean));
+
+    inventoryData.forEach(inv => {
+      const invName  = String(inv[nameKey ]||'').trim();
+      if (!invName) return;
+      const invDesig = desigKey ? String(inv[desigKey]||'').trim() : '';
+      if (invDesig && !TARGET_DESIG.includes(invDesig)) return;
+      if (slateFootprint.has(invName)) return;
+
+      cards.push({
+        name: invName, idesig: invDesig,
+        irank: rankKey ? String(inv[rankKey]||'') : '',
+        cmd: 'UNASSIGNED', iprd: '', days: -999, origIdx: -1
+      });
+    });
+  }
+
+  cards.sort((a,b) => a.days - b.days);
+  document.getElementById('priority-count').textContent = cards.length;
+
+  panel.innerHTML = '';
+  if (!cards.length) {
+    panel.innerHTML = '<div style="text-align:center;padding:30px 10px;color:#1a2a3a;font-size:10px;letter-spacing:2px;text-transform:uppercase;">NO PRIORITY ACTIONS</div>';
+    return;
+  }
+
+  cards.forEach(card => {
+    let cls = 'caution';
+    if      (card.days <= 0)  cls = 'crit';
+    else if (card.days <= 60) cls = 'urgent';
+    else if (card.days <= 90) cls = 'warning';
+
+    const dLabel = card.days === -999        ? 'UNASSIGNED'
+                 : card.days <= 0            ? `${Math.abs(card.days)}d PAST`
+                 : `${card.days}d`;
+
+    const div = document.createElement('div');
+    div.className = `p-card ${cls}`;
+    div.innerHTML = `
+      <div class="p-card-top">
+        <div>
+          <div class="p-card-name">${esc(card.name)}</div>
+          <div class="p-card-meta">${esc(card.idesig)} | ${esc(card.irank)||'--'}</div>
+          <div class="p-card-meta">${esc(card.cmd)}</div>
+          ${card.iprd ? `<div class="p-card-meta">PRD: ${esc(card.iprd)}</div>` : ''}
+        </div>
+        <div class="p-card-days">${dLabel}</div>
+      </div>`;
+
+    if (card.origIdx >= 0) {
+      div.onclick = () => openPersonnelModal(card.origIdx);
+    } else {
+      div.onclick = () => teleport(card.name);
+    }
+    panel.appendChild(div);
+  });
+}
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+function openBilletModal(idx) {
+  const row = slateData[idx]; if (!row) return;
+  const modal = document.getElementById('rec-modal');
+  modal.className = 'modal-box';
+  document.getElementById('rec-title').textContent = `⬡ BILLET  //  ${row.BBTITLE || 'UNKNOWN'}`;
+
+  const body = document.getElementById('rec-body');
+  body.innerHTML = '';
+
+  const keys = Object.keys(row).filter(k => k.toUpperCase().startsWith('B') || k.toUpperCase().startsWith('A') || k.toUpperCase() === 'UIC');
+  keys.forEach(k => {
+    const d = document.createElement('div'); d.className = 'mf-row';
+    d.innerHTML = `<div class="mf-key">${esc(k)}</div><div class="mf-val">${esc(String(row[k]||'--'))}</div>`;
+    body.appendChild(d);
+  });
+  document.getElementById('rec-overlay').style.display = 'flex';
+}
+
+function openPersonnelModal(idx) {
+  const row = slateData[idx]; if (!row) return;
+  const modal = document.getElementById('rec-modal');
+  modal.className = 'modal-box modal-pers';
+  document.getElementById('rec-title').textContent = `◈ PERSONNEL  //  ${row.INAME || 'UNKNOWN'}`;
+
+  const body = document.getElementById('rec-body');
+  body.innerHTML = '';
+
+  const persKeys = Object.keys(row).filter(k => k.toUpperCase().startsWith('I') || k.toUpperCase().startsWith('P'));
+  const ctxKeys  = ['ASNAME','ALOC_TITL','BBTITLE','BDESIG','BRANK','UIC'].filter(k => k in row);
+
+  function addSection(label, keys) {
+    if (!keys.length) return;
+    const h = document.createElement('div'); h.className = 'modal-section-head'; h.textContent = label;
+    body.appendChild(h);
+    keys.forEach(k => {
+      const d = document.createElement('div'); d.className = 'mf-row';
+      d.innerHTML = `<div class="mf-key">${esc(k)}</div><div class="mf-val">${esc(String(row[k]||'--'))}</div>`;
+      body.appendChild(d);
+    });
+  }
+
+  addSection('// PERSONNEL DATA', persKeys);
+  addSection('// BILLET CONTEXT', ctxKeys);
+
+  // Future orders block
+  const fmap  = buildFutureMap();
+  const iname = String(row.INAME||'').trim();
+  const fo    = fmap[iname];
+  if (fo && iname) {
+    const bl = document.createElement('div'); bl.className = 'future-orders-block';
+    bl.innerHTML = `<div class="fo-block-title">// FUTURE ORDERS DETECTED</div>
+      <div class="fo-block-cmd">${esc(fo.toCmd)}</div>
+      <div class="fo-block-dates">EDA: ${esc(fo.eda) || 'N/A'}  &nbsp;|&nbsp;  EDD: ${esc(fo.edd) || 'N/A'}</div>`;
+    body.appendChild(bl);
+  }
+
+  document.getElementById('rec-overlay').style.display = 'flex';
+}
+
+function closeRecModal(e) { if (e.target.id === 'rec-overlay') closeRecDirect(); }
+function closeRecDirect()  { document.getElementById('rec-overlay').style.display = 'none'; }
+function closeHudModal(e)  { if (e.target.id === 'hud-overlay')  document.getElementById('hud-overlay').style.display = 'none'; }
+
+/* ============================================================
+   FILTER ACTIONS
+   ============================================================ */
+function setFilter(f) {
+  activeFilter = f;
+  ['btn-all','btn-1880','btn-1840','btn-7840','btn-students','btn-vacancies'].forEach(id => document.getElementById(id).classList.remove('active'));
+  const map = { all:'btn-all','1880':'btn-1880','1840':'btn-1840','7840':'btn-7840', students:'btn-students', vacancies:'btn-vacancies' };
+  if (map[f]) document.getElementById(map[f]).classList.add('active');
+  renderTable();
+}
+
+function applyHF() {
+  hf.cmd  = document.getElementById('f-cmd' ).value;
+  hf.loc  = document.getElementById('f-loc' ).value;
+  hf.bttl = document.getElementById('f-bttl').value;
+  hf.bdes = document.getElementById('f-bdes').value;
+  hf.ides = document.getElementById('f-ides').value;
+  hf.brk  = document.getElementById('f-brk' ).value;
+  hf.irk  = document.getElementById('f-irk' ).value;
+  renderTable();
+}
+
+function onSearch(val) { searchTerm = val; renderTable(); }
+
+function clearAllFilters() {
+  activeFilter = 'all'; searchTerm = '';
+  hf = { cmd:'', loc:'', bttl:'', bdes:'', ides:'', brk:'', irk:'' };
+  document.getElementById('search-bar').value = '';
+  ['f-cmd','f-loc','f-bttl','f-bdes','f-ides','f-brk','f-irk'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['btn-all','btn-1880','btn-1840','btn-7840','btn-students','btn-vacancies'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('btn-all').classList.add('active');
+  renderTable();
+}
+
+function teleport(name) {
+  document.getElementById('search-bar').value = name;
+  onSearch(name);
+}
+
+/* ============================================================
+   SYSTEM RESET
+   ============================================================ */
+function sysReset() {
+  if (!confirm('SYS RESET: Wipe ALL data and reset NEON GRID to initial state?')) return;
+
+  slateData = []; inventoryData = []; allColumns = [];
+  activeFilter = 'all'; searchTerm = '';
+  hf = { cmd:'', loc:'', bttl:'', bdes:'', ides:'', brk:'', irk:'' };
+
+  document.getElementById('slate-status').textContent = 'DRAG & DROP OR CLICK TO UPLOAD';
+  document.getElementById('inv-status'  ).textContent = 'DRAG & DROP OR CLICK TO UPLOAD';
+  document.getElementById('dz-slate'    ).classList.remove('loaded');
+  document.getElementById('dz-inv'      ).classList.remove('loaded');
+  document.getElementById('search-bar'  ).value = '';
+  document.getElementById('ls-slate'    ).textContent = '--';
+  document.getElementById('ls-inv'      ).textContent = '--';
+  document.getElementById('ls-vacant'   ).textContent = '--';
+  document.getElementById('priority-count').textContent = '--';
+
+  ['btn-all','btn-1880','btn-1840','btn-7840','btn-students','btn-vacancies'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('btn-all').classList.add('active');
+
+  ['f-cmd','f-loc','f-bttl','f-bdes','f-ides','f-brk','f-irk'].forEach(id => {
+    const el = document.getElementById(id);
+    const lbl = el.options[0].text;
+    el.innerHTML = `<option value="">${lbl}</option>`;
+  });
+
+  document.getElementById('no-data-msg' ).style.display = 'block';
+  document.getElementById('slate-table' ).style.display = 'none';
+  document.getElementById('t-head'      ).innerHTML = '';
+  document.getElementById('t-body'      ).innerHTML = '';
+
+  document.getElementById('ts-show').textContent = '0';
+  document.getElementById('ts-gaps').textContent = '0';
+  document.getElementById('ts-vac' ).textContent = '0';
+  document.getElementById('ts-olap').textContent = '0';
+  document.getElementById('ts-stu' ).textContent = '0';
+
+  document.getElementById('priority-panel').innerHTML =
+    '<div style="text-align:center;padding:30px 10px;color:#1a2a3a;font-size:10px;letter-spacing:2px;text-transform:uppercase;">AWAITING DATA UPLOAD</div>';
+
+  document.getElementById('hud-cmd' ).innerHTML = '<option value="">-- SELECT COMMAND --</option>';
+  document.getElementById('hud-result').innerHTML = '<div class="hud-empty-msg">SELECT COMMAND TO CALCULATE</div>';
+}
+
+/* ============================================================
+   EXPORT
+   ============================================================ */
+function exportXLSX() {
+  if (!slateData.length) { alert('NO DATA TO EXPORT'); return; }
+  const ws = XLSX.utils.json_to_sheet(slateData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Slate');
+  XLSX.writeFile(wb, `NEON_GRID_${new Date().toISOString().substring(0,10)}.xlsx`);
+}
+
+/* ============================================================
+   COMMAND HUD
+   ============================================================ */
+function openHUD() {
+  document.getElementById('hud-overlay').style.display = 'flex';
+  calcHUD();
+}
+
+function calcHUD() {
+  const cmdVal  = document.getElementById('hud-cmd' ).value;
+  const rankVal = document.getElementById('hud-rank').value;
+  const res     = document.getElementById('hud-result');
+
+  if (!cmdVal) {
+    res.innerHTML = '<div class="hud-empty-msg">SELECT COMMAND TO CALCULATE</div>';
+    return;
+  }
+
+  const CG = ['O4','O5','O6'];
+
+  let billets = slateData.filter(row => {
+    if (String(row.ASNAME||'').trim() !== cmdVal) return false;
+    if (isStudent(row)) return false;
+    if (!rankVal) return true;
+    const pg = toPayGrade(String(row.BRANK||''));
+    if (!pg) return false;
+    if (rankVal === 'CONTROL') return CG.includes(pg);
+    return pg === rankVal;
+  });
+
+  if (!billets.length) {
+    res.innerHTML = '<div class="hud-empty-msg">NO BILLETS FOUND FOR SELECTION</div>'; return;
+  }
+
+  let filled = 0;
+  billets.forEach(row => {
+    if (String(row.PNAME||'').trim()) { filled++; return; }
+    const d = daysUntil(parseYYYYMM(String(row.IPRD||'')));
+    if (d !== null && d > 180) filled++;
+  });
+
+  const total = billets.length;
+  const pct   = total ? Math.round(filled / total * 100) : 0;
+  const pCls  = pct >= 90 ? 'pct-g' : pct >= 75 ? 'pct-y' : 'pct-r';
+
+  const vacant = billets.filter(r => !String(r.PNAME||'').trim()).length;
+  const gaps   = billets.filter(r => {
+    const pn = String(r.PNAME||'').trim(); if (!pn) return false;
+    const pe = String(r.PEDA||''), ip = String(r.IPRD||'');
+    return pe && ip && cmpYYYYMM(pe,ip) > 0;
+  }).length;
+  const overlaps = billets.filter(r => {
+    const pn = String(r.PNAME||'').trim(); if (!pn) return false;
+    const pe = String(r.PEDA||''), ip = String(r.IPRD||'');
+    return !pe || !ip || cmpYYYYMM(pe,ip) <= 0;
+  }).length;
+
+  res.innerHTML = `
+    <div class="hud-pct ${pCls}">${pct}%</div>
+    <div class="hud-sub">FILL RATE // ${esc(cmdVal)} // ${rankVal||'ALL RANKS'}</div>
+    <div class="hud-stat-grid">
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--cyan)">${total}</div>
+        <div class="hud-stat-l">TOTAL BILLETS</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--green)">${filled}</div>
+        <div class="hud-stat-l">FILLED</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--yellow)">${total - filled}</div>
+        <div class="hud-stat-l">UNFILLED</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--yellow)">${vacant}</div>
+        <div class="hud-stat-l">VACANT</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--red)">${gaps}</div>
+        <div class="hud-stat-l">GAPS</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-stat-n" style="color:var(--green)">${overlaps}</div>
+        <div class="hud-stat-l">OVERLAPS</div>
+      </div>
+    </div>`;
+}
+
+/* ============================================================
+   KEYBOARD SHORTCUTS
+   ============================================================ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('rec-overlay').style.display = 'none';
+    document.getElementById('hud-overlay').style.display = 'none';
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('search-bar').focus();
+    document.getElementById('search-bar').select();
+  }
+});
+</script>
+</body>
+</html>
