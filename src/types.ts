@@ -17,6 +17,7 @@ export interface Kid {
   streak: number;
   lastStreakDate: string;
   badges: string[];
+  weeklyPoints?: number;
 }
 
 export interface ParentProfile {
@@ -65,6 +66,24 @@ export interface RewardRedemption {
   denied: boolean;
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string;        // YYYY-MM-DD
+  time?: string;       // HH:MM 24h
+  endTime?: string;
+  description?: string;
+  color: string;       // 'blue'|'green'|'red'|'purple'|'orange'|'pink'|'teal'|'yellow'
+}
+
+export interface WeeklyScoreRecord {
+  id: string;
+  kidId: string;
+  weekStart: string;   // YYYY-MM-DD Sunday
+  points: number;
+  savedAt: string;
+}
+
 export interface AppState {
   kids: Kid[];
   chores: Chore[];
@@ -75,6 +94,9 @@ export interface AppState {
   currentView: ViewMode;
   selectedKidId: string | null;
   activeParentId: string | null;
+  events: CalendarEvent[];
+  weeklyScoreHistory: WeeklyScoreRecord[];
+  currentWeekStart: string;
 }
 
 // ─── Kid Themes ───────────────────────────────────────────────────────────────
@@ -360,4 +382,17 @@ export function genId(): string {
 export function formatDisplayDate(dateStr: string): string {
   const d = strToDate(dateStr);
   return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
+}
+
+export function getSundayOfWeek(date: Date = new Date()): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+export function formatTime12(time24: string): string {
+  const [h, m] = time24.split(':').map(Number);
+  const suffix = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')}${suffix}`;
 }

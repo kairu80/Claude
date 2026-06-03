@@ -3,19 +3,67 @@ import { useApp } from '../context/AppContext';
 import { ChoreModal } from '../components/ChoreModal';
 import { KidModal } from '../components/KidModal';
 import { RewardModal } from '../components/RewardModal';
-import { WeekCalendar } from '../components/WeekCalendar';
+import { MonthCalendar } from '../components/MonthCalendar';
+import { EventModal } from '../components/EventModal';
 import { BirthdayCountdown } from '../components/BirthdayBanner';
 import {
+  CalendarEvent,
   Chore, Kid, Reward, ChoreType, getKidColor, getXPProgress,
   todayStr, getWeekDays, dateToStr, ALL_BADGES, DAY_FULL, MONTH_NAMES,
-  getBirthdayInfo, formatAge,
+  getBirthdayInfo, formatAge, formatTime12,
 } from '../types';
 import {
   LayoutDashboard, ListChecks, Calendar, Gift, Users, LogOut,
   Plus, Pencil, Trash2, CheckCircle, XCircle, ChevronRight, Star, Flame, Settings,
+  Download, RotateCcw, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 type ParentTab = 'dashboard' | 'chores' | 'calendar' | 'rewards' | 'kids';
+
+function exportICS(events: CalendarEvent[]) {
+  if (!events.length) { alert('No events to export!'); return; }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//ChoreQuest//Family Calendar//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  for (const ev of events) {
+    const ds = ev.date.replace(/-/g, '');
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${ev.id}@chorequest.app`);
+    lines.push(`DTSTAMP:${stamp}`);
+    if (ev.time) {
+      const ts = ev.time.replace(':', '') + '00';
+      lines.push(`DTSTART:${ds}T${ts}`);
+      if (ev.endTime) {
+        lines.push(`DTEND:${ds}T${ev.endTime.replace(':', '')}00`);
+      } else {
+        const [h, m] = ev.time.split(':').map(Number);
+        const end = new Date(0); end.setHours(h + 1, m);
+        lines.push(`DTEND:${ds}T${pad(end.getHours())}${pad(end.getMinutes())}00`);
+      }
+    } else {
+      const nextDay = new Date(ev.date + 'T12:00:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      lines.push(`DTSTART;VALUE=DATE:${ds}`);
+      lines.push(`DTEND;VALUE=DATE:${dateToStr(nextDay).replace(/-/g, '')}`);
+    }
+    lines.push(`SUMMARY:${ev.title.replace(/[,;\\]/g, c => '\\' + c)}`);
+    if (ev.description) lines.push(`DESCRIPTION:${ev.description.replace(/[,;\\]/g, c => '\\' + c).replace(/\n/g, '\\n')}`);
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ChoreQuest-Calendar.ics'; a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function ParentView() {
   const { state, dispatch } = useApp();
@@ -24,10 +72,16 @@ export function ParentView() {
   const [editingChore, setEditingChore] = useState<Chore | null | 'new'>(null);
   const [editingKid, setEditingKid] = useState<Kid | null | 'new'>(null);
   const [editingReward, setEditingReward] = useState<Reward | null | 'new'>(null);
-  const [calWeekOffset, setCalWeekOffset] = useState(0);
-  const [calFilterKid, setCalFilterKid] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [editingParentPin, setEditingParentPin] = useState<{ id: string; pin: string } | null>(null);
+  const [confirmResetWeek, setConfirmResetWeek] = useState(false);
+  const [showWeekHistory, setShowWeekHistory] = useState(false);
+
+  // Calendar state
+  const [calMonth, setCalMonth] = useState(new Date());
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null | 'new'>(null);
+  const [calDefaultDate, setCalDefaultDate] = useState<string | undefined>();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const todayDate = todayStr();
   const today = new Date();
@@ -42,6 +96,13 @@ export function ParentView() {
   const pendingRedemptions = state.redemptions.filter(r => !r.approved && !r.denied);
   const totalAlerts = pendingCompletions.length + pendingRedemptions.length;
 
+  const sortedEvents = [...(state.events ?? [])].sort((a, b) => {
+    const d = a.date.localeCompare(b.date);
+    return d !== 0 ? d : (a.time ?? '').localeCompare(b.time ?? '');
+  });
+
+  const selectedDayEvents = selectedDay ? sortedEvents.filter(e => e.date === selectedDay) : [];
+
   const TABS = [
     { id: 'dashboard' as ParentTab, label: 'Dashboard', icon: <LayoutDashboard size={18}/> },
     { id: 'chores'    as ParentTab, label: 'Chores',    icon: <ListChecks size={18}/> },
@@ -49,6 +110,11 @@ export function ParentView() {
     { id: 'rewards'   as ParentTab, label: 'Rewards',   icon: <Gift size={18}/> },
     { id: 'kids'      as ParentTab, label: 'Kids',      icon: <Users size={18}/> },
   ];
+
+  function handleDayClick(ds: string) {
+    setSelectedDay(ds);
+    setCalDefaultDate(ds);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -75,13 +141,22 @@ export function ParentView() {
           onClose={() => setEditingReward(null)}
         />
       )}
+      {editingEvent !== null && (
+        <EventModal
+          event={editingEvent === 'new' ? undefined : editingEvent}
+          defaultDate={calDefaultDate}
+          onSave={event => dispatch({ type: editingEvent === 'new' ? 'ADD_EVENT' : 'UPDATE_EVENT', event })}
+          onDelete={editingEvent !== 'new' ? (id) => dispatch({ type: 'DELETE_EVENT', eventId: id }) : undefined}
+          onClose={() => setEditingEvent(null)}
+        />
+      )}
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className={`bg-gradient-to-r ${activeParent?.gradient ?? 'from-slate-700 to-slate-900'} text-white px-4 pt-4 pb-0 shadow-xl`}>
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between pb-4">
             <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-3xl shadow-lg`}>
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
                 {activeParent?.avatar ?? '👤'}
               </div>
               <div>
@@ -103,7 +178,7 @@ export function ParentView() {
 
           {/* Settings panel */}
           {showSettings && (
-            <div className="bg-white/10 rounded-2xl p-4 mb-3 animate-fade-in space-y-3">
+            <div className="bg-white/10 rounded-2xl p-4 mb-3 space-y-3">
               <p className="text-sm font-black text-white/90">⚙️ PIN Settings</p>
               {state.parents.map(p => (
                 <div key={p.id} className="flex items-center gap-3">
@@ -182,6 +257,74 @@ export function ParentView() {
                 <StatCard label="Rewards" value={state.rewards.length} sub="available" icon="🎁" color="bg-amber-500" />
               </div>
 
+              {/* Weekly scores */}
+              <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                  <h2 className="text-base font-black text-gray-700">⭐ Weekly Scores</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowWeekHistory(v => !v)}
+                      className="text-xs text-purple-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-purple-50"
+                    >
+                      History {showWeekHistory ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                    </button>
+                    {confirmResetWeek ? (
+                      <div className="flex gap-1">
+                        <button onClick={() => { dispatch({ type: 'RESET_WEEKLY_SCORES' }); setConfirmResetWeek(false); }}
+                          className="px-3 py-1 bg-red-500 text-white text-xs font-black rounded-lg">Confirm</button>
+                        <button onClick={() => setConfirmResetWeek(false)}
+                          className="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg">Cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmResetWeek(true)}
+                        className="flex items-center gap-1 text-xs text-red-500 font-bold px-2 py-1 rounded-lg hover:bg-red-50">
+                        <RotateCcw size={12}/> Reset Week
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-4 pb-4 space-y-2">
+                  {[...state.kids].sort((a, b) => (b.weeklyPoints ?? 0) - (a.weeklyPoints ?? 0)).map((kid, i) => {
+                    const color = getKidColor(kid.colorName);
+                    const maxPts = Math.max(...state.kids.map(k => k.weeklyPoints ?? 0), 1);
+                    const pct = Math.round(((kid.weeklyPoints ?? 0) / maxPts) * 100);
+                    return (
+                      <div key={kid.id} className="flex items-center gap-3">
+                        <span className="text-lg w-6 text-center">{['🥇','🥈','🥉'][i] ?? '🏅'}</span>
+                        <span className="text-xl">{kid.avatar}</span>
+                        <span className="text-sm font-bold text-gray-700 w-16 flex-shrink-0">{kid.name}</span>
+                        <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full bg-gradient-to-r ${color.gradient} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-sm font-black text-gray-800 w-12 text-right">{kid.weeklyPoints ?? 0} pts</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Week history */}
+                {showWeekHistory && (state.weeklyScoreHistory ?? []).length > 0 && (
+                  <div className="border-t border-gray-100 px-4 py-3">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Past Weeks</p>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {[...(state.weeklyScoreHistory ?? [])].reverse().map(rec => {
+                        const kid = state.kids.find(k => k.id === rec.kidId);
+                        return (
+                          <div key={rec.id} className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{kid?.avatar ?? '👤'}</span>
+                            <span className="font-semibold">{kid?.name ?? rec.kidId}</span>
+                            <span className="text-gray-300">·</span>
+                            <span>Week of {rec.weekStart}</span>
+                            <span className="ml-auto font-bold text-amber-600">{rec.points} pts</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+
               {/* Pending approvals */}
               {(pendingCompletions.length > 0 || pendingRedemptions.length > 0) && (
                 <section>
@@ -248,6 +391,7 @@ export function ParentView() {
                               <span className="text-xs text-amber-600 font-bold flex items-center gap-1"><Star size={11} className="fill-amber-400 text-amber-400"/> {kid.points} pts</span>
                               <span className="text-xs text-gray-400">{kid.totalXP} XP</span>
                               <span className="text-xs text-green-600 font-semibold">✅ {todayDone} today</span>
+                              <span className="text-xs text-purple-600 font-semibold">⭐ {kid.weeklyPoints ?? 0} this week</span>
                             </div>
                             <div className="h-1.5 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
                               <div className={`h-full bg-gradient-to-r ${color.gradient} rounded-full`} style={{ width: `${xp.percentage}%` }} />
@@ -370,64 +514,108 @@ export function ParentView() {
           {tab === 'calendar' && (
             <>
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h2 className="text-xl font-black text-gray-800">Chore Calendar</h2>
+                <h2 className="text-xl font-black text-gray-800">Family Calendar</h2>
                 <div className="flex gap-2">
-                  <button onClick={() => setCalWeekOffset(w => w - 1)} className="w-9 h-9 bg-white rounded-xl shadow flex items-center justify-center text-gray-600">‹</button>
-                  <button onClick={() => setCalWeekOffset(0)} disabled={calWeekOffset === 0} className="px-3 h-9 bg-white rounded-xl shadow text-xs font-bold text-gray-600 disabled:opacity-40">Today</button>
-                  <button onClick={() => setCalWeekOffset(w => w + 1)} className="w-9 h-9 bg-white rounded-xl shadow flex items-center justify-center text-gray-600">›</button>
+                  <button
+                    onClick={() => exportICS(state.events ?? [])}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl shadow transition-colors"
+                  >
+                    <Download size={14}/> Export .ics
+                  </button>
+                  <button
+                    onClick={() => { setCalDefaultDate(todayDate); setEditingEvent('new'); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow transition-colors"
+                  >
+                    <Plus size={14}/> Add Event
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                <button onClick={() => setCalFilterKid(null)} className={`px-4 py-1.5 rounded-xl text-sm font-bold flex-shrink-0 ${calFilterKid === null ? 'bg-slate-700 text-white' : 'bg-white text-gray-600 shadow-sm'}`}>👨‍👩‍👧‍👦 All</button>
-                {state.kids.map(kid => {
-                  const color = getKidColor(kid.colorName);
-                  return (
-                    <button key={kid.id} onClick={() => setCalFilterKid(kid.id)} className={`px-4 py-1.5 rounded-xl text-sm font-bold flex-shrink-0 ${calFilterKid === kid.id ? `${color.bg} text-white` : 'bg-white text-gray-600 shadow-sm'}`}>
-                      {kid.avatar} {kid.name}
+              <div className="bg-white rounded-2xl shadow-sm p-4">
+                <MonthCalendar
+                  events={state.events ?? []}
+                  completions={state.completions}
+                  chores={state.chores}
+                  kids={state.kids}
+                  month={calMonth}
+                  onMonthChange={setCalMonth}
+                  isParentMode={true}
+                  onDayClick={handleDayClick}
+                  onEventClick={ev => setEditingEvent(ev)}
+                />
+              </div>
+
+              {/* Selected day events */}
+              {selectedDay && (
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <h3 className="font-black text-gray-700 text-sm">
+                      {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </h3>
+                    <button
+                      onClick={() => { setCalDefaultDate(selectedDay); setEditingEvent('new'); }}
+                      className="flex items-center gap-1 text-xs font-bold text-purple-600 hover:bg-purple-50 px-2 py-1 rounded-lg"
+                    >
+                      <Plus size={12}/> Add
                     </button>
-                  );
-                })}
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-sm p-3 overflow-x-auto">
-                <WeekCalendar chores={state.chores} completions={state.completions} kids={state.kids} filterKidId={calFilterKid} weekOffset={calWeekOffset} isParentView />
-              </div>
-
-              {/* Per-kid summary */}
-              <h3 className="text-sm font-black text-gray-600">This Week's Summary</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {state.kids.map(kid => {
-                  const color = getKidColor(kid.colorName);
-                  const weekDays = getWeekDays();
-                  let totalPossible = 0, totalDone = 0;
-                  weekDays.forEach(day => {
-                    const dow = day.getDay();
-                    const ds = dateToStr(day);
-                    state.chores.forEach(c => {
-                      if (c.type === 'kindness') return;
-                      if (c.assignedTo.length > 0 && !c.assignedTo.includes(kid.id)) return;
-                      if (!c.daysOfWeek.includes(dow as any)) return;
-                      totalPossible++;
-                      if (state.completions.some(x => x.choreId === c.id && x.kidId === kid.id && x.date === ds)) totalDone++;
-                    });
-                  });
-                  const pct = totalPossible > 0 ? Math.round((totalDone / totalPossible) * 100) : 0;
-                  return (
-                    <div key={kid.id} className="bg-white rounded-2xl shadow-sm p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xl">{kid.avatar}</span>
-                        <span className="font-bold text-gray-800">{kid.name}</span>
-                        <span className={`ml-auto font-black text-lg ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-yellow-600' : 'text-red-500'}`}>{pct}%</span>
-                      </div>
-                      <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full bg-gradient-to-r ${color.gradient}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{totalDone}/{totalPossible} chores done</p>
+                  </div>
+                  {selectedDayEvents.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-gray-400">
+                      <p className="text-sm font-semibold">No events this day</p>
+                      <button onClick={() => { setCalDefaultDate(selectedDay); setEditingEvent('new'); }}
+                        className="mt-2 text-purple-600 font-bold text-sm">+ Add an event</button>
                     </div>
-                  );
-                })}
-              </div>
+                  ) : (
+                    <div className="divide-y divide-gray-50">
+                      {selectedDayEvents.map(ev => (
+                        <div key={ev.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => setEditingEvent(ev)}>
+                          <div className={`w-2 rounded-full self-stretch flex-shrink-0 bg-${ev.color}-400`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm text-gray-800">{ev.title}</p>
+                            {ev.time && <p className="text-xs text-gray-500">{formatTime12(ev.time)}{ev.endTime ? ` – ${formatTime12(ev.endTime)}` : ''}</p>}
+                            {ev.description && <p className="text-xs text-gray-400 truncate">{ev.description}</p>}
+                          </div>
+                          <Pencil size={14} className="text-gray-300 flex-shrink-0"/>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Upcoming events list */}
+              <section>
+                <h3 className="text-sm font-black text-gray-600 mb-2">📅 All Upcoming Events</h3>
+                {sortedEvents.filter(e => e.date >= todayDate).length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-sm p-6 text-center text-gray-400">
+                    <p className="text-3xl mb-2">📭</p>
+                    <p className="font-semibold text-sm">No upcoming events</p>
+                    <button onClick={() => { setCalDefaultDate(todayDate); setEditingEvent('new'); }}
+                      className="mt-2 text-purple-600 font-bold text-sm">+ Add your first event</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {sortedEvents.filter(e => e.date >= todayDate).map(ev => (
+                      <div key={ev.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3 px-4 py-3 hover:border-purple-200 cursor-pointer transition-all"
+                        onClick={() => setEditingEvent(ev)}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-${ev.color}-100`}>
+                          📅
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm text-gray-800">{ev.title}</p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {ev.time ? ` · ${formatTime12(ev.time)}` : ''}
+                            {ev.endTime ? ` – ${formatTime12(ev.endTime)}` : ''}
+                          </p>
+                          {ev.description && <p className="text-xs text-gray-400 truncate">{ev.description}</p>}
+                        </div>
+                        <Pencil size={14} className="text-gray-300 flex-shrink-0"/>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </>
           )}
 
@@ -525,17 +713,11 @@ export function ParentView() {
                         </div>
                       </div>
                       <div className="p-4">
-                        <div className="grid grid-cols-3 gap-3 mb-3">
-                          <div className="text-center"><div className="text-2xl font-black text-amber-500">⭐{kid.points}</div><div className="text-xs text-gray-500">points left</div></div>
-                          <div className="text-center"><div className="text-2xl font-black text-blue-600">{allTimeCompletions}</div><div className="text-xs text-gray-500">chores done</div></div>
-                          <div className="text-center"><div className="text-2xl font-black text-purple-600">{kid.badges.length}</div><div className="text-xs text-gray-500">badges</div></div>
-                        </div>
-
-                        {/* PIN display */}
-                        <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-3">
-                          <span className="text-sm font-bold text-gray-600">🔐 Login PIN:</span>
-                          <span className="font-mono font-black text-purple-700 text-lg tracking-widest">{kid.pin}</span>
-                          <span className="text-xs text-gray-400 ml-auto">Change in edit mode</span>
+                        <div className="grid grid-cols-4 gap-3 mb-3">
+                          <div className="text-center"><div className="text-xl font-black text-amber-500">⭐{kid.points}</div><div className="text-xs text-gray-500">pts left</div></div>
+                          <div className="text-center"><div className="text-xl font-black text-purple-600">{kid.weeklyPoints ?? 0}</div><div className="text-xs text-gray-500">this week</div></div>
+                          <div className="text-center"><div className="text-xl font-black text-blue-600">{allTimeCompletions}</div><div className="text-xs text-gray-500">all time</div></div>
+                          <div className="text-center"><div className="text-xl font-black text-purple-600">{kid.badges.length}</div><div className="text-xs text-gray-500">badges</div></div>
                         </div>
 
                         {/* Badges */}
