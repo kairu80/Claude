@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: command === 'build' ? '/claude/' : '/',
+  base: command === 'build' ? '/Claude/' : '/',
   server: {
     host: true,
     port: 3000,
