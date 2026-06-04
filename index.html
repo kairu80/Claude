@@ -6,11 +6,28 @@
     <title>ChoreQuest - Make Chores Fun!</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; }
+      #splash {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 100vh; gap: 16px; color: #6b7280;
+      }
+      #splash .icon {
+        width: 64px; height: 64px; background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        border-radius: 20px; display: flex; align-items: center; justify-content: center;
+        font-size: 32px;
+      }
+      #splash h1 { font-size: 24px; font-weight: 900; color: #1f2937; }
+      #splash p { font-size: 14px; }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="splash">
+        <div class="icon">🏆</div>
+        <h1>ChoreQuest</h1>
+        <p>Loading…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
